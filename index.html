@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tanmay Rane — Portfolio</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <!-- Info modal (cert / job details) -->
+  <div id="info-modal" class="hidden">
+    <div class="modal-inner">
+      <button id="modal-close">✕</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Room label HUD -->
+  <div id="room-label" class="hidden"></div>
+
+  <!-- Hover / door hint -->
+  <div id="interact-hint"></div>
+
+  <!-- Door open hint (shown at start) -->
+  <div id="door-hint">Click the door to enter</div>
+
+  <!-- Mobile virtual D-pad -->
+  <div id="dpad">
+    <button class="dpad-btn" data-key="w">▲</button>
+    <div class="dpad-row">
+      <button class="dpad-btn" data-key="a">◀</button>
+      <button class="dpad-btn" data-key="s">▼</button>
+      <button class="dpad-btn" data-key="d">▶</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

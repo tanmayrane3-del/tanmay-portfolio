@@ -1,0 +1,199 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Georgia', serif;
+}
+
+#canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+}
+
+#canvas:active { cursor: grabbing; }
+
+/* ── Info modal ── */
+#info-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+#info-modal.hidden { display: none; }
+
+.modal-inner {
+  background: #fff;
+  max-width: 620px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 2.5rem;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+#modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1.2rem;
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: #666;
+}
+
+#modal-content h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.4rem;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+#modal-content .meta {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 1.2rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#modal-content .grade-badge {
+  display: inline-block;
+  background: #f0f0f0;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  border-radius: 2px;
+}
+
+#modal-content ul {
+  list-style: none;
+  padding: 0;
+}
+
+#modal-content ul li {
+  padding: 0.4rem 0;
+  padding-left: 1.2rem;
+  position: relative;
+  color: #444;
+  line-height: 1.6;
+  font-size: 0.92rem;
+}
+
+#modal-content ul li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: #bbb;
+}
+
+/* ── Room label HUD ── */
+#room-label {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.85);
+  padding: 0.5rem 1.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #1a1a1a;
+  z-index: 50;
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+
+#room-label.hidden { opacity: 0; }
+
+/* ── Interaction hint (centre screen) ── */
+#interact-hint {
+  position: fixed;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  padding: 0.45rem 1.1rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  border-radius: 2px;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+#interact-hint.visible { opacity: 1; }
+
+/* ── Door hint (start screen) ── */
+#door-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(44, 26, 14, 0.75);
+  color: #e8d4b0;
+  padding: 0.6rem 1.6rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid rgba(200,169,110,0.4);
+  border-radius: 2px;
+  z-index: 50;
+  pointer-events: none;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.9; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Mobile D-pad ── */
+#dpad {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 60;
+}
+
+@media (pointer: coarse) {
+  #dpad { display: flex; }
+  #door-hint { font-size: 0.75rem; padding: 0.5rem 1.2rem; }
+}
+
+.dpad-row {
+  display: flex;
+  gap: 4px;
+}
+
+.dpad-btn {
+  width: 52px;
+  height: 52px;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 6px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.dpad-btn:active { background: rgba(200,200,200,0.9); }
