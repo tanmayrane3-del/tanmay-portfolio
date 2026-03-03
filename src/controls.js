@@ -34,7 +34,11 @@ export class Controls {
     this.lastY = 0;
     this._dragMoved = false;
 
-    // Touch — two-finger forward
+    // Joystick analog output (-1..1 on each axis)
+    this.joyX = 0;
+    this.joyY = 0;
+
+    // Touch — look tracking
     this.touches = {};
 
     this._bindEvents();
@@ -82,12 +86,9 @@ export class Controls {
       for (const t of e.changedTouches) {
         const prev = this.touches[t.identifier];
         if (!prev) continue;
-        // Only look if single touch
-        if (e.touches.length === 1) {
-          const dx = t.clientX - prev.x;
-          const dy = t.clientY - prev.y;
-          this._rotateLook(-dx, -dy);  // invert: finger drag pans world naturally
-        }
+        const dx = t.clientX - prev.x;
+        const dy = t.clientY - prev.y;
+        this._rotateLook(-dx, -dy);  // invert: finger drag pans world naturally
         this.touches[t.identifier] = { x: t.clientX, y: t.clientY };
       }
     }, { passive: false });
@@ -96,13 +97,51 @@ export class Controls {
       for (const t of e.changedTouches) delete this.touches[t.identifier];
     });
 
-    // D-pad buttons
-    document.querySelectorAll('.dpad-btn').forEach(btn => {
-      const key = btn.dataset.key;
-      btn.addEventListener('pointerdown', () => { this.keys[key] = true; });
-      btn.addEventListener('pointerup',   () => { this.keys[key] = false; });
-      btn.addEventListener('pointerleave',() => { this.keys[key] = false; });
-    });
+    // Virtual joystick
+    const zone = document.getElementById('joystick-zone');
+    const knob = document.getElementById('joystick-knob');
+    if (zone && knob) {
+      const MAX_R = 32; // max pixel travel from zone centre
+      let joyActive = false;
+      let joyPointerId = null;
+      let zoneRect;
+
+      zone.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (joyActive) return;
+        joyActive = true;
+        joyPointerId = e.pointerId;
+        zone.setPointerCapture(e.pointerId);
+        zoneRect = zone.getBoundingClientRect();
+      });
+
+      zone.addEventListener('pointermove', e => {
+        if (!joyActive || e.pointerId !== joyPointerId) return;
+        const cx = zoneRect.left + zoneRect.width  / 2;
+        const cy = zoneRect.top  + zoneRect.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist   = Math.sqrt(dx * dx + dy * dy);
+        const angle  = Math.atan2(dy, dx);
+        const travel = Math.min(dist, MAX_R);
+        const kx = Math.cos(angle) * travel;
+        const ky = Math.sin(angle) * travel;
+        knob.style.transform = `translate(${kx}px, ${ky}px)`;
+        this.joyX =  kx / MAX_R;   // -1=left, +1=right
+        this.joyY =  ky / MAX_R;   // -1=up(fwd), +1=down(back)
+      });
+
+      const joyRelease = e => {
+        if (e.pointerId !== joyPointerId) return;
+        joyActive = false;
+        joyPointerId = null;
+        knob.style.transform = '';
+        this.joyX = 0;
+        this.joyY = 0;
+      };
+      zone.addEventListener('pointerup',     joyRelease);
+      zone.addEventListener('pointercancel', joyRelease);
+    }
   }
 
   _rotateLook(dx, dy) {
@@ -124,15 +163,16 @@ export class Controls {
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
 
-    const fwdKeys  = keys['w'] || keys['arrowup'];
-    const backKeys = keys['s'] || keys['arrowdown'];
-    const leftKeys = keys['a'] || keys['arrowleft'];
-    const rightKeys= keys['d'] || keys['arrowright'];
+    if (keys['w'] || keys['arrowup'])    dir.addScaledVector(fwd, 1);
+    if (keys['s'] || keys['arrowdown'])  dir.addScaledVector(fwd, -1);
+    if (keys['a'] || keys['arrowleft'])  dir.addScaledVector(right, -1);
+    if (keys['d'] || keys['arrowright']) dir.addScaledVector(right, 1);
 
-    if (fwdKeys)   dir.addScaledVector(fwd, 1);
-    if (backKeys)  dir.addScaledVector(fwd, -1);
-    if (leftKeys)  dir.addScaledVector(right, -1);
-    if (rightKeys) dir.addScaledVector(right, 1);
+    // Joystick (analog — joyY<0 = forward, joyX>0 = strafe right)
+    if (Math.abs(this.joyX) > 0.1 || Math.abs(this.joyY) > 0.1) {
+      dir.addScaledVector(fwd,   -this.joyY);
+      dir.addScaledVector(right,  this.joyX);
+    }
 
     if (dir.lengthSq() > 0) {
       dir.normalize().multiplyScalar(SPEED);

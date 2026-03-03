@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildCorridor, CORRIDOR } from './corridor.js';
+import { buildCorridor, animateCorridor, CORRIDOR } from './corridor.js';
 import { buildEducationRoom, updateCertSway } from './rooms/educationRoom.js';
 import { buildWorkRoom } from './rooms/workRoom.js';
 import { Controls, unlockMovement } from './controls.js';
@@ -14,13 +14,14 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf8f8f8);
 
 // Camera faces -Z (into corridor). Start close to the door.
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 120);
 camera.position.set(0, 1.7, 1.9);
 
 // ── Build world ───────────────────────────────────────────────────────────────
@@ -179,6 +180,7 @@ function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   controls.update();
+  animateCorridor(t);
   updateCertSway(scene, t);
   updateRoomLabel(camera.position);
   checkHover();

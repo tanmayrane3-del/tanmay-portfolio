@@ -158,42 +158,37 @@ body {
   50%       { opacity: 0.4; }
 }
 
-/* ── Mobile D-pad ── */
-#dpad {
+/* ── Mobile virtual joystick ── */
+#joystick-zone {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  bottom: 2.5rem;
+  right: 2.5rem;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+  border: 2px solid rgba(255,255,255,0.22);
   display: none;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   z-index: 60;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 @media (pointer: coarse) {
-  #dpad { display: flex; }
+  #joystick-zone { display: flex; }
   #door-hint { font-size: 0.75rem; padding: 0.5rem 1.2rem; }
 }
 
-.dpad-row {
-  display: flex;
-  gap: 4px;
+#joystick-knob {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.50);
+  border: 2px solid rgba(255,255,255,0.35);
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
 }
-
-.dpad-btn {
-  width: 52px;
-  height: 52px;
-  background: rgba(255,255,255,0.75);
-  border: 1px solid rgba(0,0,0,0.15);
-  border-radius: 6px;
-  font-size: 1.1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-}
-
-.dpad-btn:active { background: rgba(200,200,200,0.9); }

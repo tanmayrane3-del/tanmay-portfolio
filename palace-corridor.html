@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City Palace Corridor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #010f12; overflow: hidden; }
+    canvas { display: block; }
+    #hint {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 210, 120, 0.85);
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      pointer-events: none;
+      opacity: 0;
+      animation: fadeHint 2s ease 1.5s forwards;
+      white-space: nowrap;
+    }
+    @keyframes fadeHint { to { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">Scroll to walk &nbsp;·&nbsp; Drag to look</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  'use strict';
+
+  // ─── SCENE CONSTANTS ────────────────────────────────────────────────────────
+  const CW = 5, CH = 4, CL = 60;   // corridor width, height, length
+  const NUM_ARCHES  = 14;
+  const ARCH_GAP    = 4;            // arch spacing (world units)
+  const PILLAR_H    = 2.5;
+  const RX_O = 2.1, RY_O = 1.1;    // outer arch ellipse radii
+  const RX_I = 1.7, RY_I = 0.75;   // inner arch ellipse radii
+  const SEGS = 18;                  // arch brick segments
+  const CORRIDOR_MID_Z = -(CL / 2 - 2.5); // z-center of all planes (-27.5)
+
+  // ─── RENDERER ───────────────────────────────────────────────────────────────
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+  renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  renderer.outputEncoding      = THREE.sRGBEncoding;
+
+  // ─── SCENE / FOG ────────────────────────────────────────────────────────────
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x010f12);
+  scene.fog = new THREE.FogExp2(0x010f12, 0.045);
+
+  // ─── CAMERA ─────────────────────────────────────────────────────────────────
+  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 120);
+  camera.position.set(0, 1.6, 2.5);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // ─── MATERIAL HELPERS ───────────────────────────────────────────────────────
+  function mat(color, rough = 0.85, metal = 0) {
+    return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+  }
+
+  const mWall     = mat(0x044e59);           // deep teal (base colour)
+  const mCeiling  = mat(0x021e24);           // very dark teal
+  const mGold     = new THREE.MeshStandardMaterial({ color: 0xFFCC44, roughness: 0.22, metalness: 0.82, emissive: 0xFFAA00, emissiveIntensity: 0.30 });
+  const mSaffron  = mat(0x0a7a8c, 0.70);     // bright teal accent
+  const mOrange   = mat(0x0d6b7a, 0.75);     // medium teal
+  const mTerra    = mat(0x033a42, 0.80);     // dark teal
+  const mJewel    = mat(0x055a6a, 0.75);     // deep teal
+  const mTurmeric = mat(0x7ecdd8, 0.55, 0.10); // pale cyan highlight
+  const mPillar   = mat(0x022a32, 0.88);     // very dark teal
+
+  // ─── FLOOR ──────────────────────────────────────────────────────────────────
+  function buildFloor() {
+    // 2×2 alternating tile canvas (repeats across the floor)
+    const cv  = document.createElement('canvas');
+    cv.width  = cv.height = 128;
+    const ctx = cv.getContext('2d');
+    const h   = 64; // half size
+
+    ctx.fillStyle = '#3D2B1A'; ctx.fillRect(0, 0, h, h);
+    ctx.fillStyle = '#5C3D28'; ctx.fillRect(h, 0, h, h);
+    ctx.fillStyle = '#5C3D28'; ctx.fillRect(0, h, h, h);
+    ctx.fillStyle = '#3D2B1A'; ctx.fillRect(h, h, h, h);
+
+    // Gold grid lines
+    ctx.strokeStyle = '#FFCC44';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, 126, 126);
+    ctx.beginPath();
+    ctx.moveTo(h, 0); ctx.lineTo(h, 128);
+    ctx.moveTo(0, h); ctx.lineTo(128, h);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(CW / 2, CL / 2); // 2.5 × 30 tiles
+
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(CW, CL),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 })
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(0, 0, CORRIDOR_MID_Z);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    // Gold edge runners along both sides of the floor
+    [-1, 1].forEach(side => {
+      const runner = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.022, CL), mGold
+      );
+      runner.position.set(side * (CW / 2 - 0.04), 0.011, CORRIDOR_MID_Z);
+      scene.add(runner);
+    });
+  }
+
+  // ─── CEILING ────────────────────────────────────────────────────────────────
+  function buildCeiling() {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CW, CL), mCeiling);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.set(0, CH, CORRIDOR_MID_Z);
+    scene.add(mesh);
+
+    // Gold cross-beams at every arch position
+    for (let i = 0; i < NUM_ARCHES; i++) {
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(CW + 0.06, 0.16, 0.20),
+        mGold
+      );
+      beam.position.set(0, CH - 0.05, -(i * ARCH_GAP));
+      scene.add(beam);
+    }
+  }
+
+  // ─── WALLS ──────────────────────────────────────────────────────────────────
+  function buildWalls() {
+    // Side walls
+    [-1, 1].forEach(side => {
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(CL, CH), mWall);
+      wall.rotation.y = side * -Math.PI / 2;
+      wall.position.set(side * CW / 2, CH / 2, CORRIDOR_MID_Z);
+      wall.receiveShadow = true;
+      scene.add(wall);
+
+      // Horizontal decorative bands (sticking inward 0.03 m)
+      const cx = side * (CW / 2 - 0.015);
+      const bands = [
+        { y: 0.02, h: 0.07, m: mGold    },  // floor baseboard
+        { y: 0.65, h: 0.10, m: mSaffron },  // lower amethyst
+        { y: 0.76, h: 0.06, m: mGold    },  // lower gold (thicker)
+        { y: 1.38, h: 0.05, m: mGold    },  // mid-lower gold (new)
+        { y: 2.05, h: 0.10, m: mSaffron },  // mid amethyst
+        { y: 2.16, h: 0.06, m: mGold    },  // mid gold (thicker)
+        { y: 2.92, h: 0.05, m: mGold    },  // upper-mid gold (new)
+        { y: 3.50, h: 0.07, m: mSaffron },  // upper amethyst
+        { y: 3.58, h: 0.06, m: mGold    },  // crown gold (thicker)
+      ];
+      bands.forEach(({ y, h, m }) => {
+        const band = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, h, CL), m
+        );
+        band.position.set(cx, y + h / 2, CORRIDOR_MID_Z);
+        scene.add(band);
+      });
+    });
+
+    // Back wall
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), mWall);
+    back.position.set(0, CH / 2, -(CL - 2.5));
+    scene.add(back);
+  }
+
+  // ─── ARCH ───────────────────────────────────────────────────────────────────
+  // Circumscribed circle through 3 points — used for cusped arch lobes
+  function circleThrough(x1,y1, x2,y2, x3,y3) {
+    const ax=x2-x1, ay=y2-y1, bx=x3-x1, by=y3-y1;
+    const D = 2*(ax*by - ay*bx);
+    if (Math.abs(D) < 1e-9) return null;
+    const ux = (by*(ax*ax+ay*ay) - ay*(bx*bx+by*by)) / D;
+    const uy = (ax*(bx*bx+by*by) - bx*(ax*ax+ay*ay)) / D;
+    return { cx: x1+ux, cy: y1+uy, r: Math.hypot(ux, uy) };
+  }
+
+  function buildArch(z) {
+    // Pillars
+    [-1, 1].forEach(side => {
+      // Main pillar body
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.38, PILLAR_H, 0.48),
+        mPillar
+      );
+      pillar.position.set(side * 2.2, PILLAR_H / 2, z);
+      pillar.castShadow = pillar.receiveShadow = true;
+      scene.add(pillar);
+
+      // Saffron band on pillar (decorative)
+      const pBand = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.07, 0.50),
+        mSaffron
+      );
+      pBand.position.set(side * 2.2, PILLAR_H * 0.58, z);
+      scene.add(pBand);
+
+      // Gold pillar base plate
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.07, 0.58), mGold
+      );
+      base.position.set(side * 2.2, 0.035, z);
+      scene.add(base);
+
+      // Gold pillar capital
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.13, 0.58), mGold
+      );
+      cap.position.set(side * 2.2, PILLAR_H + 0.065, z);
+      scene.add(cap);
+
+      // Spandrel panel (fills between pillar cap and ceiling, beside arch)
+      const spandrel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.68, 1.15, 0.08),
+        mWall
+      );
+      spandrel.position.set(side * 1.62, PILLAR_H + 0.62, z);
+      scene.add(spandrel);
+
+      // Gold border strip above spandrel
+      const spBorder = new THREE.Mesh(
+        new THREE.BoxGeometry(0.72, 0.07, 0.11),
+        mGold
+      );
+      spBorder.position.set(side * 1.62, PILLAR_H + 1.16, z);
+      scene.add(spBorder);
+    });
+
+    // Outer arch ring — 18 alternating orange/terracotta bricks
+    for (let i = 0; i < SEGS; i++) {
+      const θ    = (i + 0.5) * Math.PI / SEGS;
+      const x    = Math.cos(θ) * RX_O;
+      const y    = PILLAR_H + Math.sin(θ) * RY_O;
+      const rotZ = Math.atan2(RY_O * Math.cos(θ), -RX_O * Math.sin(θ));
+      const m    = i % 2 === 0 ? mOrange : mTerra;
+
+      const brick = new THREE.Mesh(
+        new THREE.BoxGeometry(0.30, 0.17, 0.48), m
+      );
+      brick.position.set(x, y, z);
+      brick.rotation.z = rotZ;
+      scene.add(brick);
+    }
+
+    // Cusped inner arch — 5-lobe quinquefoil (scalloped arch)
+    // Each lobe is a circular arc whose endpoints sit on the inner ellipse
+    // (cusp points) and whose peak bulges toward the outer arch.
+    const N_LOBES        = 5;
+    const BRICKS_PER_LOBE = 6;
+    const RX_L = 1.90, RY_L = 0.92; // lobe-peak ellipse (between inner & outer)
+
+    for (let lobe = 0; lobe < N_LOBES; lobe++) {
+      const θ0 = lobe       * Math.PI / N_LOBES;   // cusp start angle
+      const θ1 = (lobe + 1) * Math.PI / N_LOBES;   // cusp end angle
+      const θm = (θ0 + θ1) / 2;                    // midpoint angle
+
+      // Cusp points on inner ellipse
+      const p0x = RX_I * Math.cos(θ0), p0y = PILLAR_H + RY_I * Math.sin(θ0);
+      const p1x = RX_I * Math.cos(θ1), p1y = PILLAR_H + RY_I * Math.sin(θ1);
+      // Lobe peak: outward between inner and outer ellipse
+      const pmx = RX_L * Math.cos(θm), pmy = PILLAR_H + RY_L * Math.sin(θm);
+
+      const circle = circleThrough(p0x, p0y, pmx, pmy, p1x, p1y);
+      if (!circle) continue;
+      const { cx, cy, r } = circle;
+
+      // Angles from circle centre to each key point
+      const a0 = Math.atan2(p0y - cy, p0x - cx);
+      const am = Math.atan2(pmy - cy, pmx - cx);
+      const a1 = Math.atan2(p1y - cy, p1x - cx);
+
+      // Choose arc direction that passes through the lobe peak (am)
+      let a1c = a1; while (a1c < a0) a1c += 2*Math.PI;
+      let amc = am; while (amc < a0) amc += 2*Math.PI;
+      const ccw  = amc <= a1c;
+      const a1f  = ccw ? a1c : (a1 > a0 ? a1 - 2*Math.PI : a1);
+
+      for (let k = 0; k < BRICKS_PER_LOBE; k++) {
+        const t    = (k + 0.5) / BRICKS_PER_LOBE;
+        const a    = a0 + t * (a1f - a0);
+        const bx   = cx + r * Math.cos(a);
+        const by   = cy + r * Math.sin(a);
+        const rotZ = ccw ? a + Math.PI/2 : a - Math.PI/2;
+        const m    = (lobe * BRICKS_PER_LOBE + k) % 2 === 0 ? mJewel : mTurmeric;
+        const brick = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.48), m);
+        brick.position.set(bx, by, z);
+        brick.rotation.z = rotZ;
+        scene.add(brick);
+      }
+    }
+
+    // Gold keystone at crown
+    const keystone = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.26, 0.50),
+      mGold
+    );
+    keystone.position.set(0, PILLAR_H + RY_O + 0.11, z);
+    scene.add(keystone);
+
+    // Gold connecting beam (spans full width at ceiling)
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(CW + 0.04, 0.07, 0.13),
+      mGold
+    );
+    beam.position.set(0, CH - 0.04, z);
+    scene.add(beam);
+  }
+
+  // ─── LIGHTS ─────────────────────────────────────────────────────────────────
+  const flickerLights = [];
+
+  function buildLights() {
+    // Warm ambient (very dim — let point lights do the work)
+    scene.add(new THREE.AmbientLight(0x011a20, 0.40));
+
+    // Point lights between each arch pair (7 total) — with shadows
+    const pairZ = [-2, -10, -18, -26, -34, -42, -50];
+    pairZ.forEach(z => {
+      const pl = new THREE.PointLight(0x44DDCC, 1.8, 8);
+      pl.position.set(0, 2.9, z);
+      pl.castShadow = true;
+      pl.shadow.mapSize.width  = 512;
+      pl.shadow.mapSize.height = 512;
+      pl.shadow.camera.near    = 0.2;
+      pl.shadow.camera.far     = 10;
+      scene.add(pl);
+      flickerLights.push(pl);
+    });
+
+    // Small gold glow at each arch base (no shadow — cheap fill)
+    for (let i = 0; i < NUM_ARCHES; i++) {
+      const glow = new THREE.PointLight(0xFFBB33, 0.75, 4.0);
+      glow.position.set(0, 0.40, -(i * ARCH_GAP));
+      scene.add(glow);
+    }
+
+    // Beckoning light at far end
+    const far = new THREE.PointLight(0xFFDD66, 3.5, 24);
+    far.position.set(0, 2.2, -(CL - 4));
+    scene.add(far);
+
+    // Warm gold fill near entrance
+    const fill = new THREE.PointLight(0xFFCC44, 1.2, 7);
+    fill.position.set(0, 2.6, 1.5);
+    scene.add(fill);
+  }
+
+  // ─── BUILD ──────────────────────────────────────────────────────────────────
+  buildFloor();
+  buildCeiling();
+  buildWalls();
+  for (let i = 0; i < NUM_ARCHES; i++) buildArch(-(i * ARCH_GAP));
+  buildLights();
+
+  // ─── CONTROLS ───────────────────────────────────────────────────────────────
+  let targetZ   = 2.5;
+  let targetYaw = 0;
+  let dragging  = false;
+  let prevX     = 0;
+
+  const clampZ   = v => Math.max(-54, Math.min(2.5, v));
+  const clampYaw = v => Math.max(-0.5, Math.min(0.5, v));
+
+  // Mouse wheel → walk
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    targetZ = clampZ(targetZ - e.deltaY * 0.012);
+  }, { passive: false });
+
+  // Mouse drag → look
+  canvas.addEventListener('mousedown', e => { dragging = true; prevX = e.clientX; });
+  window.addEventListener('mouseup',   ()  => { dragging = false; });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    targetYaw = clampYaw(targetYaw + (e.clientX - prevX) * 0.0022);
+    prevX = e.clientX;
+  });
+
+  // Touch → single finger drag (Y = walk, X = look)
+  let tPrevX = 0, tPrevY = 0;
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      tPrevX = e.touches[0].clientX;
+      tPrevY = e.touches[0].clientY;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - tPrevX;
+      const dy = e.touches[0].clientY - tPrevY;
+      targetYaw = clampYaw(targetYaw + dx * 0.003);
+      targetZ   = clampZ(targetZ   + dy * 0.016);
+      tPrevX = e.touches[0].clientX;
+      tPrevY = e.touches[0].clientY;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => { e.preventDefault(); }, { passive: false });
+
+  // ─── ANIMATION LOOP ─────────────────────────────────────────────────────────
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    // Flickering point lights — two sin waves per light, different phases
+    flickerLights.forEach((light, i) => {
+      light.intensity = 1.8
+        + Math.sin(t * 3.7  + i * 1.47) * 0.28
+        + Math.sin(t * 7.1  + i * 0.83) * 0.10;
+    });
+
+    // Smooth camera lerp
+    camera.position.z += (targetZ   - camera.position.z)  * 0.05;
+    camera.rotation.y += (-targetYaw - camera.rotation.y) * 0.05;
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+  </script>
+</body>
+</html>
